@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 '''
 SLeEPy is a small collection of extensions for Scikit-Learn.
 
