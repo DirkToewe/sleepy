@@ -34,10 +34,11 @@ from mpl_toolkits.mplot3d.axes3d import Axes3D
 from numpy import NaN, logical_not, isnan, pi, vstack, sin, newaxis, double
 import plotly
 
-from sleepy.regression.nonlinear import BezierRegression
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.linalg as la
 import plotly.graph_objs as go
+from sleepy.regression.nonlinear import BezierRegression
 
 
 def fitCurve():
@@ -209,29 +210,39 @@ def fitVolume():
   plotly.offline.plot(fig,filename='fit_volume.html')
 
 def quiverCurve():
-  X = np.linspace(-10, +10, 128, dtype=double)
-  y = np.vstack( map( lambda x: (cos(x),sin(x),x/10), X ) )
+  start,end,n = -10, +10, 128
+  X = np.linspace( start, end, n, dtype=double )[:,newaxis]
+  y = np.vstack( map( lambda x: (cos(x),sin(x),x**2/10), X ) )
+#   l = np.sum( la.norm( y[+1:] - y[:-1], axis=1 ) )
 
   bez = BezierRegression( coef_shape=(16,) )
-  bez.fit(X[:,newaxis], y)
- 
-  y_fit = np.vstack( map( lambda x: bez.predict(np.array([[x]])), X ) )
-  dir = np.vstack( map( lambda x: bez.jac(np.array([[x]])), X ) )[:,:,0]
+  bez.fit(X, y)
+
+#   y_fit = bez.predict(X)
+#   dirs = bez.jac(X)
+  y_fit = np.vstack( bez.predict(x[newaxis,:]) for x in X )
+  dirs  = np.vstack( bez.jac    (x[newaxis,:]) for x in X )
+  assert np.isclose( y_fit, np.vstack( bez.predict(x[newaxis,:]) for x in X ) ).all()
+  assert np.isclose( dirs,  np.vstack( bez.jac    (x[newaxis,:]) for x in X ) ).all()
+#   y_fit = np.vstack( map( lambda x: bez.predict(np.array([[x]])), X ) )
+#   dirs = 
+#   dirs = np.vstack( map( lambda x: (-sin(x),cos(x),0.1), X ) )
 
   fig = plt.figure( tight_layout=True )
   ax3d = fig.add_subplot(1,1,1, projection='3d')
-  ax3d.scatter( *( y[:,i] for i in range(3) ) )
-  ax3d.quiver(
-    *chain(
-      ( y_fit[:,i] for i in range(3) ),
-      (   dir[:,i] for i in range(3) )
-    ),
-    pivot='tail', length=0.1, color='red', arrow_length_ratio = 0.3
-  )
+  ax3d.scatter( *( y[:,i] for i in range(3) ), color='blue' )
+#   ax3d.plot( *( y_fit[:,i] for i in range(3) ), color='red' )
+  for xyz,uvw in zip(y_fit,dirs):
+    ax3d.quiver(
+      *chain(xyz,uvw),
+      pivot='tail', length=la.norm(uvw)*(end-start)/(n-1), color='red'
+    )
 
 def quiverSurface():
   uRange = np.linspace(-0.75,+0.9, 11)
   vRange = np.linspace(-0.9, +0.75,11)
+  du = uRange[1]-uRange[0]
+  dv = vRange[1]-vRange[0]
 
   input = scatterSurface3d(
     uRange, vRange,
@@ -265,23 +276,16 @@ def quiverSurface():
   ax3d = fig.add_subplot(1,1,1, projection='3d')
   ax3d.scatter( *( y    [:,i] for i in range(3) ) )
 #   ax3d.plot   ( *( y_fit[:,i] for i in range(3) ), color='red' )
-  # PLOT NORMALS
-  ax3d.quiver(
-    *chain(
-      (  y_fit[:,i] for i in range(3) ),
-      (normals[:,i] for i in range(3) )
-    ),
-    pivot='tail', length=0.1, color='red', arrow_length_ratio = 0.3
-  )
-  # PLOT TANGENT ARROWS
-  for j in range(2):
-    ax3d.quiver(
-      *chain(
-        (   y_fit[:,i]   for i in range(3) ),
-        (tangents[:,i,j] for i in range(3) )
-      ),
-      pivot='tail', length=0.1, color='red', arrow_length_ratio = 0.3
-    )
+  # plot arrows
+  for y_fit,*vecs in zip(y_fit,normals,tangents[:,:,0],tangents[:,:,1]):
+    for vec,scale in zip(vecs,[du*dv,du,dv]):
+      ax3d.quiver(
+        *chain(
+          (y_fit[i] for i in range(3) ),
+          (  vec[i] for i in range(3) )
+        ),
+        pivot='tail', length=la.norm(vec)*scale, color='red', arrow_length_ratio = 0.3
+      )
 
 def scatterSurface3d( uRange, vRange, f, text = 'u: {:.3f} v: {:.3f}'.format, **kwargs ):
   for style in ['line','marker']:

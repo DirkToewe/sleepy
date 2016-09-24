@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Game of Pyth. If not, see <http://www.gnu.org/licenses/>.
 
-from numpy import amax, amin, arange, identity as I, einsum, isinf, newaxis, power as pow
+from numpy import amax, amin, identity as I, einsum, isinf, newaxis, power as pow
 from numpy.linalg import LinAlgError, lstsq
 from scipy.special import binom as binomCoef
 from sklearn.base import RegressorMixin
@@ -28,7 +28,7 @@ import numpy.linalg as la
 
 
 def _factors(x,size):
-  rows = arange(size)[:,newaxis]
+  rows = np.arange(size)[:,newaxis]
   return (
     binomCoef(size-1,rows)
     * pow( (1+x)/2, rows[::+1] )
@@ -110,7 +110,7 @@ class BezierRegression(RegressorMixin):
     a = np.array([[1]])
     for col in range(self.n_features):
       a = a[:,newaxis,:] * _factors( X[:,col], self.coef_shape[col] ).T[:,:,newaxis]
-      a = a.reshape(( n_samples, a.shape[1]*a.shape[2] ))
+      a = a.reshape(( n_samples, -1 )) # <- -1 means the reshape() infers that remaining axis length
     # solve least square error coefficients
     assert 0 <= self.λ
     if isinf(self.λ):
@@ -168,7 +168,7 @@ class BezierRegression(RegressorMixin):
       return self._jac
     def partDerivs():
       for feature in range(self.n_features):
-        cShape = list(self.coef_shape)
+        cShape = np.array(self.coef_shape)
         cShape[feature] -= 1
         if 0 == cShape[feature]:
           yield lambda X: np.zeros(( len(X), self.n_targets ))
@@ -178,11 +178,15 @@ class BezierRegression(RegressorMixin):
           partDeriv._coefs = (
               np.delete(self._coefs,  0, axis=-1-feature)
             - np.delete(self._coefs, -1, axis=-1-feature)
+          ) * (
+            # keep in mind that we have substituted t by (x-1)/2. d( f((x-1)/2) )/dx = 0.5*f'( f((x-1)/2) )
+            0.5 * cShape[feature] * self._X_scale[feature]
           )
+          partDeriv._y_off = np.zeros(self.n_targets) # <- _y_offset does not influence derivative
           for k,v in self.__dict__.items():
             if k not in partDeriv.__dict__:
               partDeriv.__dict__[k] = v
           yield partDeriv.predict
     partDerivs = tuple( partDerivs() )
-    self._jac = lambda X: np.concatenate( tuple( f(X)[:,:,newaxis] for f in partDerivs ), axis=-1 )
+    self._jac = lambda X: np.concatenate( [ f(X)[:,:,newaxis] for f in partDerivs ], axis=-1 )
     return self._jac
