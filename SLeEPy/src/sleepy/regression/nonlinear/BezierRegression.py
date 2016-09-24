@@ -120,14 +120,10 @@ class BezierRegression(RegressorMixin):
         coefs, *_ = lstsq(a,y)
       else:
         # see: https://youtu.be/I-VfYXzC5ro?t=2100
-        try:
-          coefs = la.solve(
-            a.T @ a  +  self.λ * I(self.n_features),
-            a.T @ y
-          )
-        except LinAlgError:
-          self._coefs = np.zeros(( self.n_targets, *self.coef_shape[::-1] ))
-          return self
+        coefs = la.solve(
+          a.T @ a  +  self.λ * I(a.shape[1]),
+          a.T @ y
+        )
       self._coefs = coefs.T.reshape(( self.n_targets, *self.coef_shape[::-1] ))
 
     return self

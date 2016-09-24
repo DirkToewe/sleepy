@@ -51,7 +51,7 @@ def fitCurve():
     mode='markers', marker = dict(color='#0000FF', size=16),
   )
 
-  bez = BezierRegression( coef_shape=(16,), λ = 999e12 )
+  bez = BezierRegression( coef_shape=(16,), λ = 0.1 )
   bez.fit(X[:,newaxis], y[:,newaxis])
 
   y_fit = np.fromiter( map( lambda x: bez.predict(np.array([[x]])), X ), dtype=double )
