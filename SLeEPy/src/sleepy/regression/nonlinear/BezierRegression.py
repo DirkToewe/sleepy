@@ -18,8 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with Game of Pyth. If not, see <http://www.gnu.org/licenses/>.
 
-from numpy import amax, amin, identity as I, einsum, isinf, newaxis, power as pow
-from numpy.linalg import LinAlgError, lstsq
+from numpy import amax, amin, average, einsum, identity as I, isinf, newaxis, power as pow
+from numpy.linalg import lstsq
 from scipy.special import binom as binomCoef
 from sklearn.base import RegressorMixin
 
@@ -99,11 +99,10 @@ class BezierRegression(RegressorMixin):
     X = X - self._X_off # <- safety copy!
     X *= self._X_scale
 
-    # set y to be between -1 and +1
-    _min,_max = ( f(y,axis=0) for f in (amin,amax) )
-    self._y_off   = (_max +_min) * 0.5
-    self._y_scale = (_max -_min) / 2.0
+    # sort of z-score scale y
+    self._y_off   = average(y,axis=0)
     y = y - self._y_off # <- safety copy!
+    self._y_scale = average( la.norm(y,axis=1) )
     y /= self._y_scale
  
     # put all Bezier factors into (?,n_targets) shape.
@@ -178,7 +177,7 @@ class BezierRegression(RegressorMixin):
             # keep in mind that we have substituted t by (x-1)/2. d( f((x-1)/2) )/dx = 0.5*f'( f((x-1)/2) )
             0.5 * cShape[feature] * self._X_scale[feature]
           )
-          partDeriv._y_off = np.zeros(self.n_targets) # <- _y_offset does not influence derivative
+          partDeriv._y_off = 0 # <- _y_offset does not influence derivative
           for k,v in self.__dict__.items():
             if k not in partDeriv.__dict__:
               partDeriv.__dict__[k] = v
